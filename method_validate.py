@@ -1,4 +1,6 @@
 import input_preprocess
+import numpy as np
+import pandas as pd
 from knn_classifier import KNNClassifier
 from min_distance_classifier import MinimumDistanceClassifier
 
@@ -107,38 +109,104 @@ def run_classifiers(X_train, X_test, y_train, y_test, k_nn, distance_metric):
 
     return [predictions_knn, predictions_min_dist]
 
-def print_metrics(accuracy, precision, recall, f1, confusion_matrix):
+def print_confusion_matrix(y_test, predictions):
+    """
+    Prints the confusion matrix in a readable format.
+    """
+    from sklearn.metrics import confusion_matrix
+    cm = confusion_matrix(y_test, predictions, labels=np.unique(y_test))
+    cm_df = pd.DataFrame(cm, index=np.unique(y_test), columns=np.unique(y_test))
+    print("Confusion Matrix:\n", cm_df)
+
+def get_confusion_matrix(y_test, predictions):
+    """
+    Calculates the confusion matrix.
+    """
+    class_names = np.unique(y_test)
+    confusion_matrix = []
+    # Initialize matrix
+    for class_name in class_names:
+        confusion_matrix.append([0] * len(class_names))
+    # Fill matrix
+    for i in range(len(y_test)):
+        real_class = y_test[i]
+        predicted_class = predictions[i]
+        real_class_index = list(class_names).index(real_class)
+        predicted_class_index = list(class_names).index(predicted_class)
+        confusion_matrix[real_class_index][predicted_class_index] += 1
+    return np.array(confusion_matrix)
+
+def print_metrics(accuracy, precision, error_score, recall, f1, y_test, predictions):
     """
     Prints metrics and confusion matrix for a classifier.
     """
     # Print metrics
-    print(f"Accuracy: {accuracy}")
-    print(f"Precision: {precision}")
-    print(f"Recall: {recall}")
-    print(f"F1: {f1}")
+    print(f"Accuracy: {round(accuracy,3)}")
+    print(f"Precision: {round(precision,3)}")
+    print(f"Error score: {round(error_score,3)}")
+    print(f"Recall: {round(recall,3)}")
+    print(f"F1: {round(f1,3)}")
 
     # Print confusion matrix
-    print("Confusion Matrix:")
-    print(confusion_matrix)
+    print_confusion_matrix(y_test, predictions)
+    print("\n")
+    
+def get_accuracy(y_test, predictions):
+    """
+    Calculates accuracy for a classifier without sklearn.
+    """
+    correct = 0
+    for i in range(len(y_test)):
+        if y_test[i] == predictions[i]:
+            correct += 1
+    return correct / float(len(y_test))
 
-def calculate_metrics(y_test, predictions, print=True):
+def get_precision(y_test, predictions):
+    """
+    Calculates precision for a classifier
+    """
+    cm = get_confusion_matrix(y_test, predictions)
+    precision = 0
+    for i in range(len(cm)):
+        precision += cm[i][i] / sum(cm[i])
+    return precision / len(cm)
+
+def get_recall(y_test, predictions):
+    """
+    Calculates recall for a classifier
+    """
+    cm = get_confusion_matrix(y_test, predictions)
+    recall = 0
+    for i in range(len(cm)):
+        recall += cm[i][i] / sum(cm[:, i])
+    return recall / len(cm)
+
+def get_f1(y_test, predictions):
+    """
+    Calculates f1 for a classifier
+    """
+    precision = get_precision(y_test, predictions)
+    recall = get_recall(y_test, predictions)
+    return 2 * (precision * recall) / (precision + recall)
+
+
+def calculate_metrics(y_test, predictions, printing = True):
     """
     Calculates metrics and confusion matrix for a classifier.
     """
     # Calculate metrics
-    from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
-    accuracy = accuracy_score(y_test, predictions)
-    precision = precision_score(y_test, predictions, average='weighted')
-    recall = recall_score(y_test, predictions, average='weighted')
-    f1 = f1_score(y_test, predictions, average='weighted')
+    accuracy = get_accuracy(y_test, predictions)
+    precision = get_precision(y_test, predictions)
+    error_score = 1 - accuracy
+    recall = get_recall(y_test, predictions)
+    f1 = get_f1(y_test, predictions)
+    confusion_matrix = get_confusion_matrix(y_test, predictions)
 
-    # Calculate confusion matrix
-    from sklearn.metrics import confusion_matrix
-    confusion_matrix = confusion_matrix(y_test, predictions)
+    # print metrics
+    if printing:
+        print_metrics(accuracy, precision, error_score, recall, f1, y_test, predictions)
 
-    print_metrics(accuracy, precision, recall, f1, confusion_matrix)
-
-    return [accuracy, precision, recall, f1, confusion_matrix]
+    return [accuracy, precision, error_score, recall, f1, confusion_matrix]
 
 
 def train_and_test(data, test_percentage, k_nn = 3, distance_metric="euclidiana"):
@@ -153,7 +221,9 @@ def train_and_test(data, test_percentage, k_nn = 3, distance_metric="euclidiana"
     [predictions_knn, predictions_min_dist] = run_classifiers(X_train, X_test, y_train, y_test, k_nn, distance_metric)
 
     # Calculate metrics
+    print("Metrics for KNN Classifier:")
     calculate_metrics(y_test, predictions_knn)
+    print("Metrics for Minimum Distance Classifier:")
     calculate_metrics(y_test, predictions_min_dist)
    
 
@@ -170,20 +240,24 @@ def k_fold_cross_validation(data, k=5, k_nn = 3, distance_metric="euclidiana"):
     # initialize metrics
     accuracy_knn = 0
     precision_knn = 0
+    error_score_knn = 0
     recall_knn = 0
     f1_knn = 0
     accuracy_min_dist = 0
     precision_min_dist = 0
+    error_score_min_dist = 0
     recall_min_dist = 0
     f1_min_dist = 0
 
     # Initialize average metrics 
     avg_accuracy_knn = 0
     avg_precision_knn = 0
+    avg_error_score_knn = 0
     avg_recall_knn = 0
     avg_f1_knn = 0
     avg_accuracy_min_dist = 0
     avg_precision_min_dist = 0
+    avg_error_score_min_dist = 0
     avg_recall_min_dist = 0
     avg_f1_min_dist = 0
 
@@ -200,33 +274,42 @@ def k_fold_cross_validation(data, k=5, k_nn = 3, distance_metric="euclidiana"):
                 if train_chunk != test_chunk:
                     X_train += classes[class_name][0][train_chunk]
                     y_train += classes[class_name][1][train_chunk]
+
         # Run classifiers
         [predictions_knn, predictions_min_dist] = run_classifiers(X_train, X_test, y_train, y_test, k_nn, distance_metric)
+        print("Metrics for Fold " + str(test_chunk + 1) + ":")
         # Calculate metrics knn
-        [accuracy_knn, precision_knn, recall_knn, f1_knn, confusion_matrix_knn] = calculate_metrics(y_test, predictions_knn, False)
+        [accuracy_knn, precision_knn, error_score_knn, recall_knn, f1_knn, confusion_matrix_knn] = calculate_metrics(y_test, predictions_knn)
         # Calculate metrics min dist
-        [accuracy_min_dist, precision_min_dist, recall_min_dist, f1_min_dist, confusion_matrix_min_dist] = calculate_metrics(y_test, predictions_min_dist, False)
+        [accuracy_min_dist, precision_min_dist, error_score_min_dist, recall_min_dist, f1_min_dist, confusion_matrix_min_dist] = calculate_metrics(y_test, predictions_min_dist)
+        print("-------------------------------------------")
         # Add metrics to average
         avg_accuracy_knn += accuracy_knn
         avg_precision_knn += precision_knn
+        avg_error_score_knn += error_score_knn
         avg_recall_knn += recall_knn
         avg_f1_knn += f1_knn
         avg_accuracy_min_dist += accuracy_min_dist
         avg_precision_min_dist += precision_min_dist
+        avg_error_score_min_dist += error_score_min_dist
         avg_recall_min_dist += recall_min_dist
         avg_f1_min_dist += f1_min_dist
     # Calculate average metrics
     avg_accuracy_knn /= k
     avg_precision_knn /= k
+    avg_error_score_knn /= k
     avg_recall_knn /= k
     avg_f1_knn /= k
     avg_accuracy_min_dist /= k
     avg_precision_min_dist /= k
+    avg_error_score_min_dist /= k
     avg_recall_min_dist /= k
     avg_f1_min_dist /= k
     # Print average metrics
-    print_metrics(avg_accuracy_knn, avg_precision_knn, avg_recall_knn, avg_f1_knn, confusion_matrix_knn)
-    print_metrics(avg_accuracy_min_dist, avg_precision_min_dist, avg_recall_min_dist, avg_f1_min_dist, confusion_matrix_min_dist)
+    print("Average metrics for KNN Classifier:")
+    print_metrics(avg_accuracy_knn, avg_precision_knn, avg_error_score_knn, avg_recall_knn, avg_f1_knn, y_test, predictions_knn)
+    print("Average metrics for Minimum Distance Classifier:")
+    print_metrics(avg_accuracy_min_dist, avg_precision_min_dist,avg_error_score_min_dist, avg_recall_min_dist, avg_f1_min_dist, y_test, predictions_min_dist)
 
         
 
@@ -259,7 +342,7 @@ distance_metric = input("Ingrese el tipo de distancia (euclidiana o manhattan): 
 k_nn = int(input("Ingrese el valor de K para Knn: "))
 
 # Ask user for percentage of data to use for testing
-test_percentage = float(input("Ingrese el porcentaje de datos a utilizar para pruebas (0.2): "))
+test_percentage = float(input("Ingrese el porcentaje de datos a utilizar para entrenamiento (0.8): "))
 train_and_test(new_matrix, test_percentage, k_nn, distance_metric)
 
 # Ask user for k value for K fold cross validation
