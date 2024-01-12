@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 from knn_classifier import KNNClassifier
 from min_distance_classifier import MinimumDistanceClassifier
+import random
 
 def split_data_by_percentage(data, test_percentage):
     """
@@ -49,8 +50,6 @@ def split_data_by_chunks(data, k):
         Y_k_sets[i] = [row[0] for row in Y_k_sets[i]]
 
     return [X_k_sets, Y_k_sets] # K chunks of registers for inputs and K for outputs
-
-    
 
 def make_train_and_test_sets(classes, test_percentage):
     """Select train and test data for each class"""
@@ -311,7 +310,59 @@ def k_fold_cross_validation(data, k=5, k_nn = 3, distance_metric="euclidiana"):
     print("Average metrics for Minimum Distance Classifier:")
     print_metrics(avg_accuracy_min_dist, avg_precision_min_dist,avg_error_score_min_dist, avg_recall_min_dist, avg_f1_min_dist, y_test, predictions_min_dist)
 
-        
+def     bootstrap_validation(data, num_iterations=100, k_nn=3, distance_metric="euclidiana"):
+    """
+    Performs bootstrap validation.
+    """
+    n = len(data)
+    metrics_knn = []
+    metrics_min_dist = []
+
+    for _ in range(num_iterations):
+        # Create bootstrap sample
+        sample_indices = [random.randint(0, n-1) for _ in range(n)]
+        bootstrap_sample = [data[i] for i in sample_indices]
+        oob_indices = list(set(range(n)) - set(sample_indices))
+        oob_sample = [data[i] for i in oob_indices]
+
+        # Split bootstrap sample and out-of-bag sample
+        X_train, y_train = zip(*[(row[0], row[1][0]) for row in bootstrap_sample])
+        X_test, y_test = zip(*[(row[0], row[1][0]) for row in oob_sample])
+
+        # Convert X_train and X_test to numeric arrays
+        X_train = np.array(X_train).astype(float)
+        X_test = np.array(X_test).astype(float)
+
+        # Run classifiers and evaluate metrics
+        [predictions_knn, predictions_min_dist] = run_classifiers(X_train, X_test, y_train, y_test, k_nn, distance_metric)
+        metrics_knn.append(calculate_metrics(y_test, predictions_knn, printing=False))
+        metrics_min_dist.append(calculate_metrics(y_test, predictions_min_dist, printing=False))
+
+    # print the average metrics using print_metrics
+    # Separate numeric metrics and confusion matrices
+    numeric_metrics_knn = [m[:5] for m in metrics_knn]  # Assuming the first 5 metrics are numeric
+    confusion_matrices_knn = [m[5] for m in metrics_knn]  # Assuming the 6th metric is a confusion matrix
+    numeric_metrics_min_dist = [m[:5] for m in metrics_min_dist]  # Assuming the first 5 metrics are numeric
+    confusion_matrices_min_dist = [m[5] for m in metrics_min_dist]  # Assuming the 6th metric is a confusion matrix
+
+    # Calculate average metrics
+    avg_accuracy_knn = np.mean([m[0] for m in numeric_metrics_knn])
+    avg_precision_knn = np.mean([m[1] for m in numeric_metrics_knn])
+    avg_error_score_knn = np.mean([m[2] for m in numeric_metrics_knn])
+    avg_recall_knn = np.mean([m[3] for m in numeric_metrics_knn])
+    avg_f1_knn = np.mean([m[4] for m in numeric_metrics_knn])
+    avg_accuracy_min_dist = np.mean([m[0] for m in numeric_metrics_min_dist])
+    avg_precision_min_dist = np.mean([m[1] for m in numeric_metrics_min_dist])
+    avg_error_score_min_dist = np.mean([m[2] for m in numeric_metrics_min_dist])
+    avg_recall_min_dist = np.mean([m[3] for m in numeric_metrics_min_dist])
+    avg_f1_min_dist = np.mean([m[4] for m in numeric_metrics_min_dist])
+
+    # Print average metrics
+    print('________________________________')
+    print("Average metrics for KNN Classifier:")
+    print_metrics(avg_accuracy_knn, avg_precision_knn, avg_error_score_knn, avg_recall_knn, avg_f1_knn, y_test, predictions_knn)
+    print("Average metrics for Minimum Distance Classifier:")
+    print_metrics(avg_accuracy_min_dist, avg_precision_min_dist,avg_error_score_min_dist, avg_recall_min_dist, avg_f1_min_dist, y_test, predictions_min_dist)
 
 
 # File and delimiter
@@ -348,6 +399,10 @@ train_and_test(new_matrix, test_percentage, k_nn, distance_metric)
 # Ask user for k value for K fold cross validation
 k = int(input("Ingrese el valor de K para K fold cross validation: "))
 k_fold_cross_validation(new_matrix, k, k_nn, distance_metric)
+
+# Ask user for number of iterations for bootstrap validation
+num_iterations = int(input("Ingrese el numero de iteraciones para bootstrap validation: "))
+bootstrap_validation(new_matrix, num_iterations, k_nn, distance_metric)
 
 
 
