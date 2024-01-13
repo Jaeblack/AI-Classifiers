@@ -69,7 +69,7 @@ class KNNClassifier:
         predictions = []
         for x in X:
             # Compute distances from the test point to all training points
-            distances = [euclidean_distance(x, x_train) if self.distance_metric == 'euclidean' 
+            distances = [euclidean_distance(x, x_train) if self.distance_metric == 'euclidiana' 
                          else manhattan_distance(x, x_train) for x_train in self.X_train]
 
             # Sort by distance and get the indices of the nearest neighbors
